@@ -1,46 +1,117 @@
 # 💬 WhatsApp Chat Analysis
 
-A Python project for analyzing WhatsApp group or personal chat exports — extracting behavioral patterns, emoji usage, message frequency, word clouds, and more. Built for exploratory data analysis with full NLP preprocessing in Brazilian Portuguese.
+## Table of Contents
+1. [Overview](#overview)
+2. [Key Features](#key-features)
+3. [Pipeline Highlights](#pipeline-highlights)
+    - [Data Ingestion](#data-ingestion)
+    - [Text Cleaning](#text-cleaning)
+    - [Feature Engineering](#feature-engineering)
+    - [NLP Preprocessing](#nlp-preprocessing)
+    - [Visualizations](#visualizations)
+    - [Export Outputs](#export-outputs)
+4. [Libraries & Tools](#libraries--tools)
+5. [Setup & Installation](#setup--installation)
+6. [Real-World Application](#real-world-application)
+7. [Conclusion](#conclusion)
+8. [Portfolio and Contact](#portfolio-and-contact)
 
----
+## Overview
 
-## 📌 Overview
+This repository demonstrates my ability to apply Python for real-world data analysis — transforming raw WhatsApp chat exports into structured behavioral insights. The project covers the full data pipeline: ingestion, cleaning, NLP preprocessing, feature engineering, and visualization. It was built around a Brazilian Portuguese group chat, with multilingual NLP support and an optional topic modeling layer using BERTopic.
 
-This project takes a raw WhatsApp chat export (`.txt`) and transforms it into structured insights through data cleaning, feature engineering, visualization, and optional topic modeling. It is designed to work with multi-user group chats and handles Portuguese-language stopwords natively.
+## Key Features
 
----
+- End-to-end pipeline from raw `.txt` export to structured insights
+- Custom NLP cleaning tailored for informal, multilingual chat data
+- Emoji extraction, emoticon normalization, and frequency analysis
+- Message frequency and behavioral pattern analysis per user
+- Word cloud generation after Portuguese stopword removal
+- Optional topic modeling with BERTopic (multilingual)
+- Modular structure with two script versions showing project evolution
 
-## 📊 What It Analyzes
+## Pipeline Highlights
 
-- **Message frequency** — who sends the most messages and when
-- **Emoji usage** — top emojis overall and per user, with donut chart visualization
-- **Emoticon detection** — converts text emoticons (`:)`, `:(`) to emoji equivalents
-- **Word cloud** — most frequent words after full NLP cleaning and stopword removal
-- **Day-of-week patterns** — message frequency by weekday, overall and per user
-- **Average message length** — word count per user
-- **User activity heatmap** — message density across users and dates
-- **Topic modeling** *(commented out — optional)* — BERTopic with multilingual support for automatic topic discovery
+### Data Ingestion
+I parse the raw WhatsApp export directly into a structured DataFrame using `whatstk`:
 
----
+```python
+from whatstk import WhatsAppChat
 
-## 🗂️ Repository Structure
-
+chat = WhatsAppChat.from_source(filepath="your_chat.txt", auto_header=True).df
+print(chat.head())
 ```
-WhatsApp-Chat-Analysis/
-├── whatsapp project_final_4.55.py   ← Earlier version (no heatmap, no seaborn)
-├── whatsapp project_final_8.49.py   ← Latest version (full pipeline + heatmap)
-└── README.md
+
+This produces a clean table with `username`, `date`, and `message` columns as the foundation for all downstream analysis.
+
+### Text Cleaning
+A custom `clean_text()` function handles the noise specific to chat data:
+
+```python
+def clean_text(text):
+    text = unicodedata.normalize("NFKD", text)
+    text = text.replace('<Media omitted>', '').replace('This message was deleted', '')
+    text = re.sub(r'(https?://\S+|www\.\S+)', '', text)  # Remove URLs
+    text = re.sub(r'[0-9]+', '', text)                   # Remove numbers
+    text = re.sub(r'\s+', ' ', text)                     # Normalize whitespace
+    return text.lower().strip()
 ```
 
-> **Note:** The two script versions reflect the project's evolution. Version 8.49 is the most complete and recommended starting point.
+Emojis are intentionally preserved through the cleaning process and extracted separately for analysis.
 
----
+### Feature Engineering
+Key time and content features are derived directly from the parsed DataFrame:
 
-## 🛠️ Libraries & Tools
+```python
+chat['emoji'] = chat['message'].apply(lambda x: ''.join(c for c in x if c in emoji.EMOJI_DATA))
+chat['hour'] = chat['date'].dt.hour
+chat['day_name'] = chat['date'].dt.day_name()
+chat['week'] = (chat['date'] - pd.Timestamp('2024-01-01')).dt.days // 7
+chat['message_length'] = chat['message'].apply(lambda x: len(x.split()) if x != '<Media omitted>' else 0)
+```
+
+### NLP Preprocessing
+Portuguese stopwords from NLTK are combined with custom chat-specific terms and applied to the cleaned messages:
+
+```python
+from nltk.corpus import stopwords
+
+stop_words = stopwords.words('portuguese')
+custom_stopwords = ['nao', 'pra', 'ta', 'vc', 'vai', 'ja', 'q', 'gente', 'hahaha']
+stop_words.extend(custom_stopwords)
+
+chat['clean_msg'] = chat['clean_msg'].apply(
+    lambda x: ' '.join([word for word in x.split() if word.lower() not in stop_words])
+)
+```
+
+### Visualizations
+The project produces six distinct visualizations:
+
+- **Donut chart** — share of messages with vs. without emojis
+- **Emoji bar chart** — top 5 most used emojis across the chat
+- **Message count bar chart** — total messages per user
+- **Word cloud** — most frequent words after stopword removal
+- **Line chart (overall)** — message frequency by day of the week
+- **Line chart (per user)** — per-user message patterns across the week
+- **Heatmap** *(v8.49)* — message density by user and date using `seaborn`
+
+### Export Outputs
+All key datasets are exported as tab-separated `.txt` files for downstream use:
+
+| File | Contents |
+|---|---|
+| `chat.txt` | Full cleaned chat DataFrame |
+| `day_name_counts.txt` | Message count by weekday and user |
+| `average_message_length.txt` | Average word count per user |
+| `emoji_user_dataset.txt` | All (username, emoji) pairs |
+| `chat_summary_by_name_and_date.csv` | Messages and word count per user per day |
+
+## Libraries & Tools
 
 | Library | Purpose |
 |---|---|
-| `whatstk` | Parse WhatsApp `.txt` exports into a structured DataFrame |
+| `whatstk` | Parse WhatsApp `.txt` exports into a DataFrame |
 | `pandas` | Data manipulation and aggregation |
 | `emoji` | Emoji extraction and demojization |
 | `emot` | Text emoticon detection |
@@ -48,13 +119,10 @@ WhatsApp-Chat-Analysis/
 | `seaborn` | Heatmap visualization |
 | `nltk` | Portuguese stopword removal |
 | `wordcloud` | Word frequency visualization |
-| `re` / `unicodedata` | Text cleaning and normalization |
-| `bertopic` *(optional)* | Topic modeling |
+| `bertopic` *(optional)* | Automatic topic modeling |
 | `umap-learn` *(optional)* | Dimensionality reduction for BERTopic |
 
----
-
-## ⚙️ Setup & Installation
+## Setup & Installation
 
 **1. Clone the repository**
 ```bash
@@ -75,86 +143,36 @@ nltk.download('stopwords')
 
 **4. Export your WhatsApp chat**
 - Open the chat in WhatsApp → ⋮ Menu → More → Export Chat → Without Media
-- Save the `.txt` file to your machine
+- Save the `.txt` file locally
 
-**5. Update the file path in the script**
+**5. Update the file path**
 ```python
 chat = WhatsAppChat.from_source(filepath=r"YOUR\PATH\TO\chat.txt", auto_header=True).df
 ```
 
----
+> **Note:** Two script versions are included. `v8.49` is the most complete, adding the seaborn heatmap and a cleaner import structure. Start there.
 
-## 🔄 Pipeline Overview
+## Real-World Application
 
-```
-Raw .txt export
-      │
-      ▼
-Parse with whatstk → DataFrame (username, date, message)
-      │
-      ▼
-Clean text → remove URLs, media placeholders, numbers, special characters
-      │
-      ▼
-Feature engineering → emoji column, hour, day_name, week, message_length
-      │
-      ▼
-NLP preprocessing → demojize, remove Portuguese stopwords
-      │
-      ▼
-Aggregations → stats per user, per day, per emoji
-      │
-      ▼
-Visualizations → bar charts, line charts, donut chart, word cloud, heatmap
-      │
-      ▼
-Export → .txt / .csv outputs per dataset
-```
+This project has demonstrated practical value across several dimensions of data work:
 
----
+- Extracting behavioral patterns from unstructured, informal text at scale
+- Applying NLP preprocessing to non-English, low-formality language
+- Building reproducible data pipelines from raw export to visual output
+- Structuring exploratory analysis for presentation to both technical and non-technical audiences
+- Laying the groundwork for topic modeling and conversational AI use cases
 
-## 📤 Outputs
+## Conclusion
 
-The script exports the following files (update paths to your own machine):
+This project reflects my approach to data analysis: start with messy, real-world data, build a robust cleaning and processing pipeline, and surface insights that are both technically sound and visually accessible. It demonstrates applied skills in Python, NLP, data visualization, and pipeline design — all grounded in a genuinely interesting dataset.
 
-| File | Contents |
-|---|---|
-| `chat.txt` | Full cleaned chat DataFrame |
-| `day_name_counts.txt` | Message count by day of week and user |
-| `average_message_length.txt` | Average word count per user |
-| `emoji_user_dataset.txt` | All (username, emoji) pairs |
-| `chat_summary_by_name_and_date.csv` | Messages and word count per user per day |
+## Portfolio and Contact
 
----
+Explore my work and connect with me:
 
-## 🔧 Customization
-
-**Adding custom stopwords** — extend the list in the script to filter out chat-specific filler words:
-```python
-custom_stopwords = ['nao', 'pra', 'ta', 'vc', 'vai', 'ja', 'q', 'aqui', 'ai', 'gente']
-```
-
-**Enabling topic modeling** — uncomment the BERTopic block at the bottom of the script to run automatic topic discovery across messages.
-
-**Enabling the heatmap** — available in version 8.49, using `seaborn` to visualize message density by user and date.
-
----
-
-## 🚧 Known Limitations
-
-- File path in the script is hardcoded for Windows — update it for your OS before running
-- BERTopic and heatmap sections are commented out by default; enable them manually
-- Chat format may vary slightly between WhatsApp versions — `auto_header=True` handles most cases
-
----
-
-## 👤 Author
-
-**Felipe Leite**
-[GitHub](https://github.com/FelipeLeiteDS)
-
----
-
-## 📄 License
-
-This project is open source and available for personal and educational use.
+<div> 
+  <a href="https://linktr.ee/FelipeLeiteDS"><img src="https://img.shields.io/badge/LinkTree-1de9b6?logo=linktree&logoColor=white" target="_blank"></a>
+  <a href="https://www.linkedin.com/in/felipeleiteds/" target="_blank"><img src="https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff" target="_blank"></a>
+  <a href="https://www.felipeleite.ca"><img src="https://img.shields.io/badge/FelipeLeite.ca-%23000000.svg?logo=wix&logoColor=white" target="_blank"></a>
+  <a href="mailto:felipe.nog.leite@gmail.com"><img src="https://img.shields.io/badge/Gmail-D14836?logo=gmail&logoColor=white" target="_blank"></a>
+</div>
